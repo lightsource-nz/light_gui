@@ -1,3 +1,6 @@
+#include <light.h>
+#include <module/mod_light_display.h>
+#include <rend.h>
 #include <light_gui.h>
 
 #include "light_gui_internal.h"

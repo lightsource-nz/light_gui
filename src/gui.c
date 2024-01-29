@@ -1,86 +1,119 @@
 #include <light_gui.h>
 
-#include "light_display_internal.h"
+#include "light_gui_internal.h"
 
-static void _device_root_child_add(struct light_object *obj, struct light_object *child)
-{
-        struct display_device_root *root = to_display_device_root(obj);
-        struct display_device *dev = to_display_device(child);
-        root->device[dev->device_id] = dev;
-}
+static const struct gui_object_ops object_ops_table[] = {
+        { _type_frame_update    },
+        { _type_text_update     },
+        { _type_button_update   },
+        { _type_label_update    },
+        { _type_divider_update  }
+};
+
+static uint8_t layer_count;
+static struct gui_layer *layer[LIGHT_GUI_MAX_LAYERS];
+
 static void _layer_release(struct light_object *obj)
 {
         light_free(to_gui_layer(obj));
 }
-static void _layer_add(struct light_object *obj, struct light_object *parent) {
-        struct gui_layer *dev = to_gui_layer(obj);
-        light_debug("name=%s", dev->header.id);
+// event functions should log any failure as an error, but can't currently report them
+// to the application. this behaviour is subject to review and change in future.
+static void _layer_add(struct light_object *obj_layer, struct light_object *parent) {
+        struct gui_layer *this_layer = to_gui_layer(obj_layer);
+        light_debug("name=%s", this_layer->header.id);
+        // perform actual init operations for new layer
+        if(layer_count >= LIGHT_GUI_MAX_LAYERS) {
+                light_error("could not add new layer '%s': max layers reached (%d)",
+                                                        this_layer->header.id, LIGHT_GUI_MAX_LAYERS);
+                return;
+        }
+        layer[layer_count++] = this_layer;
+}
+static void _layer_add_child(struct light_object *obj_layer, struct light_object *child) {
+        struct gui_layer *this_layer = to_gui_layer(obj_layer);
+        light_debug("name=%s", this_layer->header.id);
         // perform actual init operations for new layer
 }
-static struct lobj_type ltype_gui_layer = (struct lobj_type) {
+static const struct lobj_type ltype_gui_layer = (struct lobj_type) {
         .id = ID_GUI_LAYER,
         .release = _layer_release,
         .evt_add = _layer_add
 };
-static uint8_t layer_count;
-static struct light_gui_layer layer[];
-
-static volatile uint16_t next_device_id;
-
+static void _object_release(struct light_object *obj)
+{
+        light_free(to_gui_object(obj));
+}
+static void _object_add(struct light_object *obj_child, struct light_object *obj_parent) {
+        struct gui_object *gui_obj = to_gui_object(obj_child);
+        struct gui_object *layer = to_gui_object(obj_parent);
+        light_debug("name=%s", gui_obj->header.id);
+}
+static void _object_add_child(struct light_object *obj_parent, struct light_object *obj_child) {
+        struct gui_object *parent = to_gui_object(obj_parent);
+        struct gui_object *child = to_gui_object(obj_child);
+        light_debug("name=%s", parent->header.id);
+}
+static const struct lobj_type ltype_gui_object = (struct lobj_type) {
+        .id = ID_GUI_OBJECT,
+        .release = _object_release,
+        .evt_add = _object_add,
+        .evt_child_add = _object_add_child
+};
 void light_gui_init()
 {
         layer_count = 0;
 }
-struct display_device *light_display_create_device(struct display_driver *driver, uint16_t width,
-                                                uint16_t height, uint8_t bpp)
+struct gui_layer *light_gui_layer_create()
 {
-        struct display_device *dev = light_object_alloc(sizeof(struct display_device));
-        struct display_driver_context *driver_ctx = driver->spawn_context();
-        return light_display_init_device(dev, driver_ctx, width, height, bpp);
+        struct gui_layer *layer = light_object_alloc(sizeof(struct gui_layer));
+        return light_gui_layer_init(layer);
 }
-struct display_device *light_display_init_device(
-                struct display_device *dev,
-                struct display_driver_context *driver_ctx,
-                uint16_t width, uint16_t height, uint8_t bpp)
+struct gui_layer *light_gui_layer_init(struct gui_layer *layer)
 {
-        light_trace("(driver=%s, width=%d, height=%d, bpp=%d)",
-                                driver_ctx->driver->name, width, height, bpp);
-        light_object_init(&dev->header, &ltype_display_device);
-        dev->device_id = next_device_id++;
-        dev->width = width;
-        dev->height = height;
-        dev->bpp = bpp;
-        dev->driver_ctx = driver_ctx;
-        return dev;
+        light_trace("","");
+        light_object_init(&layer->header, &ltype_gui_layer);
+        return layer;
 }
-void light_display_set_render_context(struct display_device *dev, struct rend_context *ctx)
+void light_gui_object_add_child(struct gui_object *parent, struct gui_object *object, const uint8_t *id)
 {
-        light_trace("device: %s, ctx: %s", dev->header.id, ctx->name);
-        dev->render_ctx = ctx;
+        if(parent->child_count >= LIGHT_GUI_OBJ_MAX_CHILDREN) {
+                light_error("failed to add gui object '%s' to parent object '%s': parent object has too many children (%d)", id, parent->header.id, LIGHT_GUI_OBJ_MAX_CHILDREN);
+                return;
+        }
+        uint8_t status;
+        if(status = light_object_add(&parent->layer->header, &object->header, "(%s):%s", parent->layer->header.type->id, id)) {
+                light_fatal("failed to add gui object '%s' to layer '%s', error code 0x%x", id, parent->layer->header.id, status);
+        }
+        parent->child[parent->child_count++] = object;
+        light_info("added object '%s' to parent object '%s' in object graph of layer: '%s'", object->header.id, parent->header.id, parent->layer->header.id);
 }
-void light_display_add_device(struct display_device *dev, uint8_t *name)
+void light_gui_layer_update(struct gui_layer *layer)
 {
-        light_object_add(&dev->header, &device_root.header, "display_device:%s", name);
-        light_info("new device initialized: '%s', driver: '%s'", dev->header.id, dev->driver_ctx->driver->name);
+        for(uint8_t i = 0; i < layer->object_count; i++) {
+                light_gui_object_update(layer->object[i]);
+        }
 }
-void light_display_command_init(struct display_device *dev)
+
+struct gui_object *light_gui_object_init(struct gui_object *object, uint8_t obj_type)
 {
-        light_debug("device: %s", dev->header.id);
-        dev->driver_ctx->driver->init_device(dev);
-        dev->driver_ctx->driver->clear(dev, 0);
+        object->object_type = obj_type;
+
+        object->ops = &object_ops_table[obj_type];
 }
-void light_display_command_update(struct display_device *dev)
+struct gui_object *light_gui_object_create(uint8_t obj_type)
 {
-        light_debug("device: %s", dev->header.id);
-        dev->driver_ctx->driver->update(dev);
+        return light_gui_object_init(light_alloc(sizeof(struct gui_object)), obj_type);
 }
-void light_display_command_reset(struct display_device *dev)
+void light_gui_object_update(struct gui_object *object)
 {
-        light_debug("device: %s", dev->header.id);
-        dev->driver_ctx->driver->reset(dev);
+        object->ops->update(object);
 }
-void light_display_command_clear(struct display_device *dev, uint16_t value)
+// called from module periodic task
+void _light_gui_task_run()
 {
-        light_debug("device: %s, value: %d", dev->header.id, value);
-        dev->driver_ctx->driver->clear(dev, value);
+        for(uint8_t i = 0; i < layer_count; i++) {
+                struct gui_layer *this_layer = layer[i];
+                light_gui_layer_update(this_layer);
+        }
 }
