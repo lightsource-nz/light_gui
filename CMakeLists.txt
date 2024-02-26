@@ -10,7 +10,7 @@ target_sources(
         light_gui PUBLIC
         ${CMAKE_CURRENT_LIST_DIR}/src/module.c
         ${CMAKE_CURRENT_LIST_DIR}/src/gui.c
-        ${CMAKE_CURRENT_LIST_DIR}/src/object_type.c
+        ${CMAKE_CURRENT_LIST_DIR}/src/object.c
 )
 
 target_link_libraries(
