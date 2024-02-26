@@ -26,10 +26,30 @@
         struct gui_object *var; \
         for( uint8_t var##_i = 0; var##_i < (container)->count; \
                 var = (container)->child[++var##_i] )
-
-#define light_gui_assert_object_type_equal(object, type) \
-        if(object->object_type != type) \
-                light_fatal("object type")
+static inline uint8_t *light_gui_object_type_to_string(uint8_t type)
+{
+        switch (type) {
+                case LIGHT_GUI_OBJ_TYPE_ROOT:
+                return "ROOT";
+                case LIGHT_GUI_OBJ_TYPE_FRAME:
+                return "FRAME";
+                case LIGHT_GUI_OBJ_TYPE_TEXT:
+                return "TEXT";
+                case LIGHT_GUI_OBJ_TYPE_BUTTON:
+                return "BUTTON";
+                case LIGHT_GUI_OBJ_TYPE_LABEL:
+                return "LABEL";
+                case LIGHT_GUI_OBJ_TYPE_DIVIDER:
+                return "DIVIDER";
+                default:
+                return "<INVALID TYPE>";
+        }
+}
+static inline void light_gui_assert_object_type_equal(struct gui_object *object, uint8_t type)
+{
+        if(object->object_type != type)
+                light_fatal("object type mismatch: expected %d but found %d", TO_STR(type), object->object_type);
+}
 
 #define LIGHT_GUI_FIELD_TYPE_0_FIELD_0                          rend_point2d
 #define LIGHT_GUI_FIELD_TYPE_1_FIELD_0                          rend_point2d
@@ -91,21 +111,32 @@ extern void light_gui_object_update(struct gui_object *object);
 // type 0: root
 static inline rend_point2d light_gui_object_type_root_get_field_point_b(struct gui_object *this)
 {
+        // assert object_type == frame
+        light_gui_assert_object_type_equal(this, LIGHT_GUI_OBJ_TYPE_FRAME);
         // light_gui_assert_object_field_type_equal(LIGHT_GUI_OBJ_TYPE_ROOT, FIELD_ROOT_POINT_B, rend_point2d);
         return light_gui_object_get_field(this, FIELD_ROOT_POINT_B, rend_point2d);
 }
 static inline uint8_t light_gui_object_type_root_set_field_point_b(struct gui_object *this, rend_point2d value)
 {
-        // TODO assert object_type == root
+        // assert object_type == root
+        light_gui_assert_object_type_equal(this, LIGHT_GUI_OBJ_TYPE_ROOT);
         // light_gui_assert_object_field_type_equal(LIGHT_GUI_OBJ_TYPE_ROOT, FIELD_ROOT_POINT_B, rend_point2d);
         return light_gui_object_set_field(this, FIELD_ROOT_POINT_B, rend_point2d, value);
 }
 // type 1: frame
 static inline rend_point2d light_gui_object_type_frame_get_field_point_b(struct gui_object *this)
 {
-        // TODO assert object_type == frame
+        // assert object_type == frame
+        light_gui_assert_object_type_equal(this, LIGHT_GUI_OBJ_TYPE_FRAME);
         // light_gui_assert_object_field_type_equal(this->object_type, FIELD_FRAME_POINT_B, rend_point2d);
         return light_gui_object_get_field(this, FIELD_FRAME_POINT_B, rend_point2d);
+}
+static inline uint8_t light_gui_object_type_frame_set_field_point_b(struct gui_object *this, rend_point2d value)
+{
+        // assert object_type == frame
+        light_gui_assert_object_type_equal(this, LIGHT_GUI_OBJ_TYPE_FRAME);
+        // light_gui_assert_object_field_type_equal(this->object_type, FIELD_FRAME_POINT_B, rend_point2d);
+        return light_gui_object_set_field(this, FIELD_FRAME_POINT_B, rend_point2d, value);
 }
 
 #endif
